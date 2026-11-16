@@ -1,0 +1,128 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile and optional compressed avatar",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "email": { "type": "string", "description": "User email address" },
+        "bio": { "type": "string", "description": "Optional user bio" },
+        "avatarBase64": { "type": "string", "description": "Optional compressed JPEG base64 avatar" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "displayName", "email", "createdAt", "updatedAt"]
+    },
+    "UserPhoto": {
+      "title": "UserPhoto",
+      "description": "User uploaded, camera captured, or ESP32-CAM snapshot photo with metadata and optional GPS coordinates",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "caption": { "type": "string", "description": "Photo caption" },
+        "description": { "type": "string", "description": "Photo description" },
+        "aiSummary": { "type": "string", "description": "AI-generated description or notes" },
+        "imageBase64": { "type": "string", "description": "Compressed JPEG base64 image payload" },
+        "source": { "type": "string", "enum": ["gallery", "camera", "esp32"], "description": "Origin of photo" },
+        "hasLocation": { "type": "boolean", "description": "Whether GPS coordinates are attached" },
+        "latitude": { "type": "number", "description": "Optional latitude" },
+        "longitude": { "type": "number", "description": "Optional longitude" },
+        "locationLabel": { "type": "string", "description": "Optional human-readable place label" },
+        "isPublic": { "type": "boolean", "description": "Explicit opt-in public sharing flag" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "caption", "description", "imageBase64", "source", "hasLocation", "isPublic", "createdAt", "updatedAt"]
+    },
+    "SharedPhoto": {
+      "title": "SharedPhoto",
+      "description": "Explicitly opted-in public photo shared with signed-in community users",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "authorName": { "type": "string", "description": "Public display name" },
+        "caption": { "type": "string", "description": "Photo caption" },
+        "description": { "type": "string", "description": "Photo description" },
+        "imageBase64": { "type": "string", "description": "Compressed JPEG base64 image payload" },
+        "source": { "type": "string", "enum": ["gallery", "camera", "esp32"] },
+        "hasLocation": { "type": "boolean" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "isPublic": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "authorName", "caption", "description", "imageBase64", "source", "hasLocation", "isPublic", "createdAt", "updatedAt"]
+    },
+    "LocationEntry": {
+      "title": "LocationEntry",
+      "description": "User-approved GPS location history check-in",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "label": { "type": "string", "description": "Check-in label" },
+        "latitude": { "type": "number", "description": "Latitude in degrees" },
+        "longitude": { "type": "number", "description": "Longitude in degrees" },
+        "accuracyMeters": { "type": "number", "description": "GPS accuracy in meters" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "label", "latitude", "longitude", "accuracyMeters", "createdAt"]
+    },
+    "AppNotification": {
+      "title": "AppNotification",
+      "description": "In-app notification entry for uploads, camera status, AI, and account events",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "title": { "type": "string", "description": "Notification title" },
+        "message": { "type": "string", "description": "Notification message" },
+        "category": { "type": "string", "enum": ["photo", "camera", "ai", "account", "map"] },
+        "isRead": { "type": "boolean", "description": "Read status" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "title", "message", "category", "isRead", "createdAt"]
+    },
+    "AiMessage": {
+      "title": "AiMessage",
+      "description": "AI Assistant conversation message persisted per user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "role": { "type": "string", "enum": ["user", "model"] },
+        "text": { "type": "string", "description": "Message text" },
+        "attachedPhotoId": { "type": "string", "description": "Optional attached gallery photo ID" },
+        "attachedPhotoCaption": { "type": "string", "description": "Optional attached photo caption" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "role", "text", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profile document"
+    },
+    "/users/{userId}/photos/{photoId}": {
+      "schema": { "$ref": "#/entities/UserPhoto" },
+      "description": "User private photos with metadata and optional GPS coordinates"
+    },
+    "/shared_photos/{photoId}": {
+      "schema": { "$ref": "#/entities/SharedPhoto" },
+      "description": "Publicly shared opt-in photos"
+    },
+    "/users/{userId}/location_history/{entryId}": {
+      "schema": { "$ref": "#/entities/LocationEntry" },
+      "description": "User-approved GPS location history"
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/AppNotification" },
+      "description": "User notification center entries"
+    },
+    "/users/{userId}/ai_messages/{messageId}": {
+      "schema": { "$ref": "#/entities/AiMessage" },
+      "description": "User AI assistant conversation history"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Smart AI Map",
+  "description": "Futuristic AI assistant, GPS map explorer, photo gallery, and ESP32-CAM companion app crafted by S.D.KIRUTHICK.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

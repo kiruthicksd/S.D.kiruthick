@@ -1,0 +1,198 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.userId == userId &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+             data.email is string && data.email.size() <= 160 &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() <= 300)) &&
+             (!('avatarBase64' in data) || (data.avatarBase64 is string && data.avatarBase64.size() <= 400000)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidUserPhoto(data, userId) {
+      return data.userId == userId &&
+             data.caption is string && data.caption.size() <= 200 &&
+             data.description is string && data.description.size() <= 1000 &&
+             (!('aiSummary' in data) || (data.aiSummary is string && data.aiSummary.size() <= 2000)) &&
+             data.imageBase64 is string && data.imageBase64.size() >= 1 && data.imageBase64.size() <= 750000 &&
+             data.source in ['gallery', 'camera', 'esp32'] &&
+             data.hasLocation is bool &&
+             (!('latitude' in data) || (data.latitude is number && data.latitude >= -90 && data.latitude <= 90)) &&
+             (!('longitude' in data) || (data.longitude is number && data.longitude >= -180 && data.longitude <= 180)) &&
+             (!('locationLabel' in data) || (data.locationLabel is string && data.locationLabel.size() <= 120)) &&
+             data.isPublic is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidSharedPhoto(data) {
+      return data.userId == request.auth.uid &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 80 &&
+             data.caption is string && data.caption.size() <= 200 &&
+             data.description is string && data.description.size() <= 1000 &&
+             data.imageBase64 is string && data.imageBase64.size() >= 1 && data.imageBase64.size() <= 750000 &&
+             data.source in ['gallery', 'camera', 'esp32'] &&
+             data.hasLocation is bool &&
+             (!('latitude' in data) || (data.latitude is number && data.latitude >= -90 && data.latitude <= 90)) &&
+             (!('longitude' in data) || (data.longitude is number && data.longitude >= -180 && data.longitude <= 180)) &&
+             data.isPublic == true &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidLocationEntry(data, userId) {
+      return data.userId == userId &&
+             data.label is string && data.label.size() >= 1 && data.label.size() <= 120 &&
+             data.latitude is number && data.latitude >= -90 && data.latitude <= 90 &&
+             data.longitude is number && data.longitude >= -180 && data.longitude <= 180 &&
+             data.accuracyMeters is number && data.accuracyMeters >= 0 && data.accuracyMeters <= 100000 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidNotification(data, userId) {
+      return data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.message is string && data.message.size() >= 1 && data.message.size() <= 500 &&
+             data.category in ['photo', 'camera', 'ai', 'account', 'map'] &&
+             data.isRead is bool &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidAiMessage(data, userId) {
+      return data.userId == userId &&
+             data.role in ['user', 'model'] &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 8000 &&
+             (!('attachedPhotoId' in data) || (data.attachedPhotoId is string && data.attachedPhotoId.size() <= 128)) &&
+             (!('attachedPhotoCaption' in data) || (data.attachedPhotoCaption is string && data.attachedPhotoCaption.size() <= 200)) &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isValidId(userId) &&
+                       isOwner(userId) &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'email', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'bio', 'avatarBase64', 'createdAt', 'updatedAt']) &&
+                       isValidUserProfile(incoming(), userId);
+      allow update: if isValidId(userId) &&
+                       isOwner(userId) &&
+                       isValidUserProfile(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'bio', 'avatarBase64', 'updatedAt']);
+      allow delete: if isValidId(userId) && isOwner(userId);
+
+      match /photos/{photoId} {
+        allow get: if isValidId(photoId) && isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isValidId(photoId) &&
+                         isOwner(userId) &&
+                         incoming().keys().hasAll(['userId', 'caption', 'description', 'imageBase64', 'source', 'hasLocation', 'isPublic', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'caption', 'description', 'aiSummary', 'imageBase64', 'source', 'hasLocation', 'latitude', 'longitude', 'locationLabel', 'isPublic', 'createdAt', 'updatedAt']) &&
+                         isValidUserPhoto(incoming(), userId);
+        allow update: if isValidId(photoId) &&
+                         isOwner(userId) &&
+                         isValidUserPhoto(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().imageBase64 == existing().imageBase64 &&
+                         incoming().source == existing().source &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['caption', 'description', 'aiSummary', 'hasLocation', 'latitude', 'longitude', 'locationLabel', 'isPublic', 'updatedAt']);
+        allow delete: if isValidId(photoId) && isOwner(userId);
+      }
+
+      match /location_history/{entryId} {
+        allow get: if isValidId(entryId) && isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isValidId(entryId) &&
+                         isOwner(userId) &&
+                         incoming().keys().hasAll(['userId', 'label', 'latitude', 'longitude', 'accuracyMeters', 'createdAt']) &&
+                         incoming().keys().hasOnly(['userId', 'label', 'latitude', 'longitude', 'accuracyMeters', 'createdAt']) &&
+                         isValidLocationEntry(incoming(), userId);
+        allow update: if false;
+        allow delete: if isValidId(entryId) && isOwner(userId);
+      }
+
+      match /notifications/{notificationId} {
+        allow get: if isValidId(notificationId) && isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isValidId(notificationId) &&
+                         isOwner(userId) &&
+                         incoming().keys().hasAll(['userId', 'title', 'message', 'category', 'isRead', 'createdAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'message', 'category', 'isRead', 'createdAt']) &&
+                         isValidNotification(incoming(), userId);
+        allow update: if isValidId(notificationId) &&
+                         isOwner(userId) &&
+                         isValidNotification(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
+        allow delete: if isValidId(notificationId) && isOwner(userId);
+      }
+
+      match /ai_messages/{messageId} {
+        allow get: if isValidId(messageId) && isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isValidId(messageId) &&
+                         isOwner(userId) &&
+                         incoming().keys().hasAll(['userId', 'role', 'text', 'createdAt']) &&
+                         incoming().keys().hasOnly(['userId', 'role', 'text', 'attachedPhotoId', 'attachedPhotoCaption', 'createdAt']) &&
+                         isValidAiMessage(incoming(), userId);
+        allow update: if false;
+        allow delete: if isValidId(messageId) && isOwner(userId);
+      }
+    }
+
+    match /shared_photos/{photoId} {
+      allow get: if isValidId(photoId) && isSignedIn() && existing().isPublic == true;
+      allow list: if isSignedIn() && existing().isPublic == true;
+      allow create: if isValidId(photoId) &&
+                       isSignedIn() &&
+                       incoming().keys().hasAll(['userId', 'authorName', 'caption', 'description', 'imageBase64', 'source', 'hasLocation', 'isPublic', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'authorName', 'caption', 'description', 'imageBase64', 'source', 'hasLocation', 'latitude', 'longitude', 'isPublic', 'createdAt', 'updatedAt']) &&
+                       isValidSharedPhoto(incoming());
+      allow update: if isValidId(photoId) &&
+                       isSignedIn() &&
+                       existing().userId == request.auth.uid &&
+                       isValidSharedPhoto(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().imageBase64 == existing().imageBase64 &&
+                       incoming().source == existing().source &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'caption', 'description', 'hasLocation', 'latitude', 'longitude', 'isPublic', 'updatedAt']);
+      allow delete: if isValidId(photoId) && isSignedIn() && existing().userId == request.auth.uid;
+    }
+  }
+}
